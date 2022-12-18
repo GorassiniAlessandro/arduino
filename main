@@ -1,0 +1,351 @@
+// 07/08/2021 - LED Mask Controller by Riccardo Iacob
+
+// 18/12/2022 rework
+// 1. Substitute if-string with switch statement DONE
+// 2. Remove default patterns and animations DONE
+// 3. Clean up types DONE
+// 4. Define serial commands at top of program DONE
+
+
+// 18/12/2022 - LED Mask Controller rewatchede by Gorassini Alessandro
+
+// 18/12/2022 controlling
+
+#include <LedControl.h>
+#include <binary.h>
+
+// LED string PWM GPIOs
+#define RPin 4
+#define GPin 3
+#define BPin 2
+// Serial commands
+#define CMD_SET_R_EYE 10
+#define CMD_SET_L_EYE 12
+#define CMD_SET_EYES 15
+#define CMD_SET_MOUTH 11
+#define CMD_SET_ALL 13
+#define CMD_CLEAR_ALL 14
+
+// DT, CLK, CS, TOTAL DISPLAYS
+LedControl matrix = LedControl(5, 7, 6, 3);
+// Display buffers
+uint8_t r_eye[64];
+uint8_t mouth[64];
+uint8_t l_eye[64];
+
+// Function prototypes
+void setLED_analogWrite(int rval, int gval, int bval);
+uint8_t bitflipFromVector(uint8_t *v, int start, int end);
+void setCustomPatternFromVector(int cs, uint8_t *v);
+void setREye();
+void setLEye();
+void setEyes();
+void setMouth();
+void setAll();
+void clearAll();
+
+void setup()
+{
+  // Pin modes
+  pinMode(RPin, OUTPUT);
+  pinMode(GPin, OUTPUT);
+  pinMode(BPin, OUTPUT);
+  // Turn on displays
+  matrix.shutdown(0, false);
+  matrix.shutdown(1, false);
+  matrix.shutdown(2, false);
+  matrix.setIntensity(0, 15);
+  matrix.setIntensity(1, 15);
+  matrix.setIntensity(2, 15);
+  // Serial
+  Serial.begin(38400);
+  Serial1.begin(38400);
+  // Idle
+  digitalWrite(RPin, HIGH);
+}
+
+void loop()
+{
+  uint8_t c = 0;
+
+  // Read serial command
+  if (Serial1.available() == 1)
+  {
+    c = Serial1.read();
+  }
+
+  switch (c)
+  {
+  case CMD_SET_R_EYE:
+    setREye();
+    break;
+  case CMD_SET_L_EYE:
+    setLEye();
+    break;
+  case CMD_SET_MOUTH:
+    setMouth();
+    break;
+  case CMD_SET_ALL:
+    setAll();
+    break;
+  case CMD_SET_EYES:
+    setEyes();
+    break;
+  default:
+    break;
+  }
+}
+
+void setCustomPatternFromVector(int cs, uint8_t *v)
+{
+  // row col addr state
+  // Break down the vector into single rows
+  matrix.setRow(cs, 0, bitflipFromVector(v, 0, 8));
+  matrix.setRow(cs, 1, bitflipFromVector(v, 8, 15));
+  matrix.setRow(cs, 2, bitflipFromVector(v, 16, 23));
+  matrix.setRow(cs, 3, bitflipFromVector(v, 24, 31));
+  matrix.setRow(cs, 4, bitflipFromVector(v, 32, 39));
+  matrix.setRow(cs, 5, bitflipFromVector(v, 40, 47));
+  matrix.setRow(cs, 6, bitflipFromVector(v, 48, 55));
+  matrix.setRow(cs, 7, bitflipFromVector(v, 56, 63));
+}
+
+uint8_t bitflipFromVector(uint8_t *v, int start, int end)
+{
+  uint8_t result = B00000000;
+  for (int i = 0; i < 8; i++)
+  {
+    if (*(v + i + start) == 1)
+    {
+      switch (i)
+      {
+      case (0):
+      {
+        bitWrite(result, 7, 1);
+      }
+      case (1):
+      {
+        bitWrite(result, 6, 1);
+      }
+      case (2):
+      {
+        bitWrite(result, 5, 1);
+      }
+      case (3):
+      {
+        bitWrite(result, 4, 1);
+      }
+      case (4):
+      {
+        bitWrite(result, 3, 1);
+      }
+      case (5):
+      {
+        bitWrite(result, 2, 1);
+      }
+      case (6):
+      {
+        bitWrite(result, 1, 1);
+      }
+      case (7):
+      {
+        bitWrite(result, 0, 1);
+      }
+      }
+    }
+    else if (*(v + i + start) == 0)
+    {
+      switch (i)
+      {
+      case (0):
+      {
+        bitWrite(result, 7, 0);
+      }
+      case (1):
+      {
+        bitWrite(result, 6, 0);
+      }
+      case (2):
+      {
+        bitWrite(result, 5, 0);
+      }
+      case (3):
+      {
+        bitWrite(result, 4, 0);
+      }
+      case (4):
+      {
+        bitWrite(result, 3, 0);
+      }
+      case (5):
+      {
+        bitWrite(result, 2, 0);
+      }
+      case (6):
+      {
+        bitWrite(result, 1, 0);
+      }
+      case (7):
+      {
+        bitWrite(result, 0, 0);
+      }
+      }
+    }
+  }
+  return result;
+}
+
+void setLED_analogWrite(int rval, int gval, int bval)
+{
+  analogWrite(RPin, rval);
+  analogWrite(GPin, gval);
+  analogWrite(BPin, bval);
+}
+
+void setREye()
+{
+  // Read the matrix pattern
+  String read = Serial1.readString();
+  read.replace("true", "1");
+  read.replace("false", "0");
+  read.replace("[", "");
+  read.replace("]", "");
+  // Fill the matrix vector
+  int pos = 0;
+  for (int i = 0; i < 64; i++)
+  {
+    if (read[pos] == '1')
+    {
+      r_eye[i] = 1;
+    }
+    else
+    {
+      r_eye[i] = 0;
+    }
+    pos = pos + 3;
+  }
+  // Apply the matrix pattern
+  setCustomPatternFromVector(0, r_eye);
+}
+
+void setLEye()
+{
+  // Read the matrix pattern
+  String read = Serial1.readString();
+  read.replace("true", "1");
+  read.replace("false", "0");
+  read.replace("[", "");
+  read.replace("]", "");
+  // Fill the matrix vector
+  int pos = 0;
+  for (int i = 0; i < 64; i++)
+  {
+    if (read[pos] == '1')
+    {
+      l_eye[i] = 1;
+    }
+    else
+    {
+      l_eye[i] = 0;
+    }
+    pos = pos + 3;
+  }
+  // Apply the matrix pattern
+  setCustomPatternFromVector(2, l_eye);
+}
+
+void setEyes()
+{
+  // Read the matrix pattern
+  String read = Serial1.readString();
+  read.replace("true", "1");
+  read.replace("false", "0");
+  read.replace("[", "");
+  read.replace("]", "");
+  // Fill the matrix vector
+  int pos = 0;
+  for (int i = 0; i < 64; i++)
+  {
+    if (read[pos] == '1')
+    {
+      r_eye[i] = 1;
+      l_eye[i] = 1;
+    }
+    else
+    {
+      r_eye[i] = 0;
+      l_eye[i] = 0;
+    }
+    pos = pos + 3;
+  }
+  // Apply the matrix pattern
+  setCustomPatternFromVector(0, r_eye);
+  setCustomPatternFromVector(2, l_eye);
+}
+
+void setMouth()
+{
+  // Read the matrix pattern
+  String read = Serial1.readString();
+  read.replace("true", "1");
+  read.replace("false", "0");
+  read.replace("[", "");
+  read.replace("]", "");
+  // Fill the matrix vector
+  int pos = 0;
+  for (int i = 0; i < 64; i++)
+  {
+    if (read[pos] == '1')
+    {
+      mouth[i] = 1;
+    }
+    else
+    {
+      mouth[i] = 0;
+    }
+    pos = pos + 3;
+  }
+  // Apply the matrix pattern
+  setCustomPatternFromVector(1, mouth);
+}
+
+void setAll()
+{
+  // Read the matrix pattern
+  String read = Serial1.readString();
+  read.replace("true", "1");
+  read.replace("false", "0");
+  read.replace("[", "");
+  read.replace("]", "");
+  // Fill the matrix vector
+  int pos = 0;
+  for (int i = 0; i < 64; i++)
+  {
+    if (read[pos] == '1')
+    {
+      r_eye[i] = 1;
+      mouth[i] = 1;
+      l_eye[i] = 1;
+    }
+    else
+    {
+      r_eye[i] = 0;
+      mouth[i] = 0;
+      l_eye[i] = 0;
+    }
+    pos = pos + 3;
+  }
+  // Apply the matrix pattern
+  setCustomPatternFromVector(0, r_eye);
+  setCustomPatternFromVector(1, mouth);
+  setCustomPatternFromVector(2, l_eye);
+}
+
+void clearAll()
+{
+  uint8_t clear[64] = {0};
+  // Apply the matrix pattern
+  setCustomPatternFromVector(0, clear);
+  setCustomPatternFromVector(1, clear);
+  setCustomPatternFromVector(2, clear);
+}
